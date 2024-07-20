@@ -1,13 +1,6 @@
 import numpy as np
 import time
-import pdb
-import os
-import shutil
-import math
-from matplotlib import pyplot as plt
-
 import MPC_LIP_modi
-import MPC_LIP_cbf
 import gymnasium as gym
 from gymnasium.envs.registration import register
 from data_procs.logger_mpc import Logger

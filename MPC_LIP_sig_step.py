@@ -1,5 +1,4 @@
 import math
-import copy
 import cyipopt
 import numpy as np
 import mpmath as mp
