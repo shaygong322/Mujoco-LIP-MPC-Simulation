@@ -7,69 +7,39 @@ from data_procs.logger_mpc import Logger
 
 
 if __name__ == "__main__":
-
-	# Initilize MPC 
-	hd_init  = 0
-	leg_ind  = -1															# negative left, positive right
-	step_t	 = 0.4
+	# Obstacle list and arrays
 	safe_dis = 0.4
-	goal 	 = [[10, 10]]
-	map_init = [0.0, 0.0]
-	margin 	 = [-0.5, 10.5]
-	path = 'data_log/LIP_mexy_'
 	obs_cir_list = np.array([[1, 1, 0.5], [2, 2, 0.5], [6, 4, 0.8], [6.4, 7.2, 1.0], [4.8, 0.8, 0.4],
 					     [2, 6, 0.3]])
+	obs_cir_safe = np.array(obs_cir_list) + [0, 0, safe_dis]
 	obs_elp_list = []
 	obs_elp_safe = []
 
-	# obs_elp_list = np.array([[4.8, 0.8, 0.4, 0.32, math.pi/12],
-    #         [1.5, 1.5, 1.1, 0.7, math.pi/4],
-    #         [3, 5, 0.6, 1.2, math.pi/3]])
-
-	# obs_cir_list = np.array([[6, 4, 0.8], 
-    #         [6.4, 7.2, 1.0],
-    #         [8, 2, 0.3]])
-
-	# obs_cir_list =  [[1.83, 4.14, 0.83], [2.9, 1.23, 0.94], [4.43, 8.02, 0.87], [6.12, 6.53, 0.51]]
-	# obs_elp_list =  [[4.88, 4.48, 0.85, 0.65, 0.19], [0.32, 2.58, 0.25, 0.22, 2.74], [8.7, 3.47, 0.96, 0.52, 0.47], [8.37, 9.47, 0.52, 0.29, 3.09]]
-
-	obs_cir_safe = np.array(obs_cir_list) + [0, 0, safe_dis]
-	# obs_elp_safe = np.array(obs_elp_list) + [0, 0, safe_dis, safe_dis, 0]
+	# Initilize MPCCBF
+	goal = [[10, 10]]
+	margin = [-0.5, 10.5]
 	mpc_cbf1 = MPC_LIP_modi.MPCCBF(goal, obs_cir_list, obs_cir_safe, obs_elp_list, obs_elp_safe, margin)
 
-	# Initilize logger
+	# Initilize Logger
+	step_t = 0.4
+	map_init = [0.0, 0.0]
+	hd_init = 0.0
 	logger = Logger(step_t, map_init, hd_init, goal, margin)
 
-	# Digit initilize
-	start_timer = time.time()
-	render_mode = True
-	dynamics_randomization = False
-
-	# Fixed torso and rope mode added for debugging purposes
-	fb_idx = [0, 1, 2, 3, 4, 5, 6]
-	fb_vel_idx = [0, 1, 2]
-	fb_pos = np.array([0, 0.0, 0.950181, 1.0, 0.0, 0.0, 0.0])  #[0, 1, 0]
-	fb_vel = np.array([0, 0, 0 ])
-
-	# Register Custom Digit environment -------------------------------------------------------------------------------------------------------------
-	register(id='Digit-v1',
-			entry_point='digit.digit_tsc_nosprings:DigitEnv',
-			kwargs =   {'dynamics_randomization': dynamics_randomization}) 	
-	
-
-	#Create environment
-	if render_mode:	
-		env = gym.make('Digit-v1', render_mode="human")
-	else:
-		env = gym.make('Digit-v1')	
-
+	# Register Custom Digit environment with gym
+	dynamics_randomization = False # Set to False to enable dynamics randomization
+	register(id='Digit-v1', 
+		  entry_point='digit.digit_tsc_nosprings:DigitEnv', 
+		  kwargs={'dynamics_randomization': dynamics_randomization})
+	render = True
+	env = gym.make('Digit-v1', render_mode="human") # Set render_mode to "human" to render the simulation
 	state, info = env.reset()
-	done = False 
 
 	# Define simulation parameters/conditions
-	max_traj_len = 150000 #max_episode_length in walking steps
+	max_traj_len = 150000 # max_episode_length in walking steps
 	i = 0
 	f_cyc = 40
+	leg_ind = -1 # negative left, positive right
 	traj_len = 0
 	num_step = 1
 	torso_fixed = False
@@ -81,11 +51,17 @@ if __name__ == "__main__":
 	full_traj_list = []
 	pre_traj_list = []
 	pred_str_traj_list = []
-
-	# init vel desire
 	vel_des = mpc_cbf1.alip_des_vel(0.6, leg_ind)
 	vel_log = []
-
+	fb_idx = [0, 1, 2, 3, 4, 5, 6]
+	fb_vel_idx = [0, 1, 2]
+	fb_pos = np.array([0, 0.0, 0.950181, 1.0, 0.0, 0.0, 0.0])
+	fb_vel = np.array([0, 0, 0 ])
+	path = 'data_log/LIP_mexy_' # Path to save data
+	done = False  # Task done flag
+	start_timer = time.time() # Start timer
+	
+	# Main loop
 	while traj_len < max_traj_len:
 
 		if torso_fixed == True:
@@ -95,12 +71,17 @@ if __name__ == "__main__":
 			vel[fb_vel_idx] = fb_vel
 			env.set_state(pos,vel)
 		
+		# Update logger
 		logger.update_n_record(env, leg_ind, step_t/f_cyc)
-		rest_t = step_t - (i)*(step_t/f_cyc)
 
+		# Calculate rest time
+		rest_t = step_t - i*(step_t/f_cyc)
+
+		# If first step, set the head of the STF
 		if i == 0:
 			logger.set_stf_head(num_step)
 
+		# If the step is a multiple of 1(which is always true), generate the next foot input
 		if np.mod(i, 1) == 0:
 			print('++++++++++++++++++++++++++++++')
 			print('mpc')
@@ -109,19 +90,22 @@ if __name__ == "__main__":
 			vel_des = logger.mpc_state_tar[0][2:4]
 			logger.print_states(rest_t, num_step)
 
+		# Generate high level action
 		high_level_action = logger.gen_tsc_control(i, f_cyc)
 		
+		# Log last stance sign
 		last_stance_sign = env.stance_sign
+
+		# Take a step in the environment
 		next_state, reward, done, info = env.step(high_level_action)
+
+		# Update i
 		i += 1
 		
+		# Check if foot has changed
 		if last_stance_sign != env.stance_sign:
 			# Plot trajectories
 			print('@@@@@@@@@@@@@@@@@@@@@@@@@ change foot @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@')
-			# if num_step >= 27:
-			# 	logger.plot_each_pre_trajects(pre_traj_list, real_traj, af_pred_traj_list, obs_list)
-			# logger.plot_each_pre_trajects(pre_traj_list, real_traj, af_pred_traj_list, obs_list)
-			
 			# Update index
 			i = 0
 			num_step += 1
@@ -141,20 +125,16 @@ if __name__ == "__main__":
 				print('close')
 				break
 
+		# Check if the robot has fallen
 		if logger.height < 0.4:
 			print('fall')
 			break
 
+		# Check if the robot is really close to the goal
 		if logger.close2goal:
 			real_close = True
-		# dis2goal = math.sqrt((logger.pos_com_map_glo_fram[0]-goal[0][0])**2 +\
-		# 			   (logger.pos_com_map_glo_fram[1]-goal[0][1])**2) 
 
-		# if dis2goal <= 0.25:
-		# 	print('close')
-		# 	break
-
-		if render_mode and traj_len % 2 == 0:
+		if render and traj_len % 2 == 0:
 			env.render()
 		traj_len += 1
 
@@ -162,4 +142,3 @@ if __name__ == "__main__":
 	print("elapsed time = ", elapsed_time)
 	logger.plot_each_pre_trajects(pre_traj_list, real_str_traj, pred_str_traj_list, obs_cir_list, \
 							   obs_elp_list, feasi_traj_list, fail_traj_list, full_traj_list, path)
-
