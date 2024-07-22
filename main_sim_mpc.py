@@ -136,9 +136,11 @@ if __name__ == "__main__":
 
 		if render and traj_len % 2 == 0:
 			env.render()
+		
 		traj_len += 1
 
 	elapsed_time = time.time() - start_timer
 	print("elapsed time = ", elapsed_time)
+
 	logger.plot_each_pre_trajects(pre_traj_list, real_str_traj, pred_str_traj_list, obs_cir_list, \
 							   obs_elp_list, feasi_traj_list, fail_traj_list, full_traj_list, path)
